@@ -331,7 +331,9 @@ export default class Upload {
 
       // For the last chunk, GCS returns 200 OK
       if (response.status === 200 || response.status === 201) {
-        const body = JSON.parse(response.responseText);
+        const body = response.responseText.trim() === ""
+          ? null
+          : JSON.parse(response.responseText);
         return { status: response.status, data: body };
       }
 

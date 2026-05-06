@@ -234,6 +234,19 @@ describe("Upload", () => {
     });
   });
 
+  describe("final response handling", () => {
+    it("treats an empty final 200 body as successful upload", async () => {
+      const upload = new Upload({
+        id: "empty-final-body",
+        url: `${getBaseURL()}/file/empty`,
+        file: makeFile(randomData(100)),
+        chunkSize: CHUNK,
+      });
+
+      await expect(upload.start()).resolves.toEqual({ status: 200, data: null });
+    });
+  });
+
   describe("retry on 5xx", () => {
     it("retries and succeeds when server recovers", async () => {
       setFailCountdown(2);

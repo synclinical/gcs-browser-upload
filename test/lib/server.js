@@ -73,6 +73,10 @@ router.put("/fail", (_req, res) => {
   res.status(403).send("Forbidden");
 });
 
+router.put("/empty", (_req, res) => {
+  res.status(200).send("");
+});
+
 // Returns 500 for first N requests, then succeeds (for retry testing)
 let failCountdown = 0;
 router.put("/fail-then-succeed", (req, res) => {
