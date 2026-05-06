@@ -245,6 +245,71 @@ describe("Upload", () => {
 
       await expect(upload.start()).resolves.toEqual({ status: 200, data: null });
     });
+
+    it("verifies upload completion before accepting a final CORS-masked error", async () => {
+      const originalXHR = globalThis.XMLHttpRequest;
+      const requests = [];
+
+      class FakeXHR {
+        constructor() {
+          this.upload = {};
+          this.status = 0;
+          this.responseText = "";
+          this.headers = {};
+          this.onload = null;
+          this.onerror = null;
+        }
+
+        open(method, url) {
+          this.method = method;
+          this.url = url;
+        }
+
+        setRequestHeader(name, value) {
+          this.headers[name.toLowerCase()] = value;
+        }
+
+        getResponseHeader() {
+          return null;
+        }
+
+        send(body) {
+          requests.push({
+            method: this.method,
+            url: this.url,
+            headers: this.headers,
+            body,
+          });
+
+          if (requests.length === 1) {
+            this.upload.onprogress?.({ lengthComputable: true, loaded: body.byteLength });
+            this.onerror?.();
+            return;
+          }
+
+          this.status = 200;
+          this.responseText = '{"status":"ok"}';
+          this.onload?.();
+        }
+      }
+
+      globalThis.XMLHttpRequest = FakeXHR;
+
+      try {
+        const upload = new Upload({
+          id: "cors-masked-final",
+          url: "https://storage.googleapis.com/upload/session",
+          file: makeFile(randomData(100)),
+          chunkSize: CHUNK,
+        });
+
+        await expect(upload.start()).resolves.toEqual({ status: 200, data: null });
+        expect(requests).toHaveLength(2);
+        expect(requests[1].headers["content-range"]).toBe("bytes */100");
+      } finally {
+        globalThis.XMLHttpRequest = originalXHR;
+      }
+    });
   });
 
   describe("retry on 5xx", () => {

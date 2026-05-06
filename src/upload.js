@@ -303,9 +303,9 @@ export default class Upload {
           };
           xhr.onerror = () => {
             this._activeXHR = null;
-            // All bytes sent + onerror on last chunk = CORS-masked success
+            // All bytes sent + onerror on last chunk may be a CORS-masked success.
             if (isLastChunk && bytesSent >= buffer.byteLength) {
-              resolve({ status: 200, data: null, _corsSuccess: true });
+              resolve({ _needsCompletionVerification: true });
             } else {
               reject(new UploadNetworkError());
             }
@@ -313,8 +313,12 @@ export default class Upload {
           xhr.send(buffer);
         });
 
-        if (response._corsSuccess === true) {
-          return { status: 200, data: null };
+        if (response._needsCompletionVerification === true) {
+          if (await this._verifyUploadComplete()) {
+            return { status: 200, data: null };
+          }
+
+          throw new UploadNetworkError();
         }
       } catch (error) {
         if (attempt < maxRetries) {
@@ -361,6 +365,36 @@ export default class Upload {
         `Upload failed with status ${response.status}`,
       );
     }
+  }
+
+  async _verifyUploadComplete() {
+    const response = await new Promise((resolve, reject) => {
+      const xhr = new XMLHttpRequest();
+      this._activeXHR = xhr;
+      xhr.open("PUT", this.url);
+      xhr.setRequestHeader("Content-Range", `bytes */${this.file.size}`);
+      xhr.onload = () => {
+        this._activeXHR = null;
+        resolve(xhr);
+      };
+      xhr.onerror = () => {
+        this._activeXHR = null;
+        reject(new UploadNetworkError());
+      };
+      xhr.send(null);
+    });
+
+    if (response.status === 200 || response.status === 201) {
+      return true;
+    }
+
+    if (response.status === 308) {
+      const rangeHeader = response.getResponseHeader("range");
+      const match = rangeHeader?.match(/bytes=0-(\d+)/);
+      return match ? parseInt(match[1], 10) + 1 >= this.file.size : false;
+    }
+
+    return false;
   }
 
   /**
