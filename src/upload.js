@@ -211,6 +211,10 @@ export default class Upload {
           this._activeXHR = null;
           resolve(xhr);
         };
+        xhr.onabort = () => {
+          this._activeXHR = null;
+          reject(new UploadCancelledError());
+        };
         xhr.onerror = () => {
           this._activeXHR = null;
           reject(new UploadNetworkError());
@@ -301,6 +305,10 @@ export default class Upload {
             this._activeXHR = null;
             resolve({ status: xhr.status, responseText: xhr.responseText });
           };
+          xhr.onabort = () => {
+            this._activeXHR = null;
+            reject(new UploadCancelledError());
+          };
           xhr.onerror = () => {
             this._activeXHR = null;
             // All bytes sent + onerror on last chunk = CORS-masked success
@@ -317,7 +325,7 @@ export default class Upload {
           return { status: 200, data: null };
         }
       } catch (error) {
-        if (attempt < maxRetries) {
+        if (attempt < maxRetries && !this._cancelled && !(error instanceof UploadCancelledError)) {
           await this._backoff(attempt);
           continue;
         }
